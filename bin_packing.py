@@ -230,12 +230,16 @@ if __name__ == '__main__':
             online = order.reverse()
 
         print("Online: " + str(online))
+        scheduable = False
         for cpuid in online:
             if rt.check_schedulable(cpuid, task):
                 print ("Insert task: {} to cpu: {:d}".format(str(task), cpuid))
                 rt.insert(cpuid, task)
-                continue
+                scheduable = True
+                break
 
+        if scheduable:
+            continue
         if offline:
             print("Turn on offline cpu {:d}".format(offline[0]))
             rt.insert(offline[0], task)
