@@ -3,6 +3,8 @@ import copy
 import random
 import math
 import collections
+import matplotlib.pyplot as plt
+import numpy as np
 
 RMS_bound = [
     1.000,  # 1
@@ -158,7 +160,7 @@ class System:
         freq_list = []
         for i in range(0, task_num):
             freq_list.append(1.0)
-        # print(freq_list)
+
         for i in range(0, task_num):
             # print ("i:{:d}".format(i))
             period = tasks[i].t
@@ -176,15 +178,21 @@ class System:
                     util = float(tmp) / t
                     if util < freq_list[i]:
                         freq_list[i] = util
-                    # for i in range(0, task_num):
-                    #     print("task:{:d} util:{:f} freq_list: {:f}".format(i, util,freq_list[i]))
+                    # for z in range(0, task_num):
+                    #     print("task:{:d} util:{:f} freq_list: {:f}".format(z, util,freq_list[z]))
 
         # for i in range(0, task_num):
-        #     print("freq_list: {:f}".format(freq_list[i]))
+        #      print("freq_list: {:d} {:f}".format(i, freq_list[i]))
         for i in range(0, task_num):
             if freq_list[i] > final_freq:
                 final_freq = freq_list[i]
-        return final_freq * MAX_SYSCLOCK_FREQ
+
+        final_sysclock = final_freq * MAX_SYSCLOCK_FREQ
+        for i in range(0, len(SCALE_SYS_FREQ)):
+            if SCALE_SYS_FREQ[i] >= final_sysclock:
+                break
+        # print("final_freq: {:f} {:f} -> final_sysclock:{:d}".format(final_freq, final_sysclock, int(SCALE_SYS_FREQ[i])))
+        return SCALE_SYS_FREQ[i]
 
     def generate_sysclock(self):
         final_sysclock = 0
@@ -194,13 +202,7 @@ class System:
             if tmp > final_sysclock:
                 final_sysclock = tmp
 
-
-        for i in range(0, len(SCALE_SYS_FREQ)):
-            if SCALE_SYS_FREQ[i] >= final_sysclock:
-                break
-
-        # print("final1: {:d} final2:{:d}".format(int(final_sysclock), int(SCALE_SYS_FREQ[i])))
-        return SCALE_SYS_FREQ[i]
+        return final_sysclock
 
     def get_energy(self, policy):
         k = 0.00442
@@ -212,6 +214,7 @@ class System:
             b = 0
         P = k * (f ** a) + b
         E = P * 60 * self.get_curr_num()
+        # print("P:{:f}, num:{:d} E:{:d}".format(P, self.get_curr_num(), int(E)))
         return E
 
 
@@ -224,7 +227,7 @@ class Task:
         return float(self.c) / self.t > float(task2.c) / task2.t
 
     def __str__(self):
-        return '({:.1f}, {:.1f})'.format(self.c, self.t)
+        return '({:.1f}, {:.1f}, {:.1f})'.format(self.c, self.t, self.c/self.t)
 
 
 if __name__ == '__main__':
@@ -236,12 +239,11 @@ if __name__ == '__main__':
     rt = System()
     graph = {}
 
-    for n in range(10):
-
+    for n in range(40):
         rt.clear()
         tasks = []
         for i in range(5):
-            ran = abs(random.gauss(0.1+(0.02*n), 0.1))
+            ran = abs(random.gauss(0.1+(0.01*n), 0.05))
             period = random.uniform(500, 1500)
             tasks.append(Task(period * ran, period))
         sorted(tasks, reverse=True)
@@ -251,8 +253,8 @@ if __name__ == '__main__':
             offline = [cpu for cpu in order if rt.util(cpu) == 0]
 
             # print("Energy(mJ): "+ str(rt.get_energy(policy)))
-            print("Order: " + str(order))
-            print("Utility: " + str(rt.util_all()))
+            #print("Order: " + str(order))
+            #print("Utility: " + str(rt.util_all()))
 
             if policy == 'WF':
                 online = [cpu for cpu in order if rt.util(cpu) != 0]
@@ -266,7 +268,7 @@ if __name__ == '__main__':
             scheduable = False
             for cpuid in online:
                 if rt.check_schedulable(cpuid, task):
-                    print ("Insert task: {} to cpu: {:d}".format(str(task), cpuid))
+                    #print ("Insert task: {} to cpu: {:d}".format(str(task), cpuid))
                     rt.insert(cpuid, task)
                     scheduable = True
                     break
@@ -274,14 +276,18 @@ if __name__ == '__main__':
             if scheduable:
                 continue
             if offline:
-                print("Turn on offline cpu {:d}".format(offline[0]))
+                #print("Turn on offline cpu {:d}".format(offline[0]))
                 rt.insert(offline[0], task)
             else:
+                print('Task: {}'.format(str(task)) )
                 print('Unable to schechule on any cpu')
                 sys.exit(1)
 
-        graph[(sum(rt.util_all())/rt.get_curr_num())] = rt.get_energy(policy)
+        graph[(sum(rt.util_all())/5)] = rt.get_energy(policy)
 
     od = collections.OrderedDict(sorted(graph.items()))
     for k, v in od.items():
         print(k, v)
+    
+    plt.plot(list(od.keys()), list(od.values()), linewidth=2.0)
+    plt.show()
