@@ -62,7 +62,7 @@ class System:
         return [sum([(task.c / task.t) for task in tasks]) for cpuid, tasks in self.cpu.items()]
 
     def util(self, cpuid):
-        return sum([(task.c / task.t) for task in self.cpu[cpuid]])
+        return sum([float(task.c/task.t) for task in self.cpu[cpuid]])
 
     def rank(self):
         infos = [(sum([(task.c / task.t) for task in tasks]), cpuid) for cpuid, tasks in self.cpu.items()]
@@ -138,32 +138,40 @@ class System:
 
     def generate_sysclock_percpu(self, cpuid):
         tasks = self.cpu[cpuid]
+        # for task in tasks:
+        #     print("task info: {} to cpu: {:d}".format(str(task), cpuid))
         final_freq = 0.0
         task_num = len(tasks)
         if task_num == 0:
-            return MAX_SYSCLOCK_FREQ
+            return MIN_SYSCLOCK_FREQ
 
         # init the freq list
         freq_list = []
         for i in range(0, task_num):
             freq_list.append(1.0)
-
+        # print(freq_list)
         for i in range(0, task_num):
+            # print ("i:{:d}".format(i))
             period = tasks[i].t
             for j in range(0, i + 1):
-                p = tasks[j].c
-                for k in range(1, task_num):
+                p = tasks[j].t
+                for k in range(1, task_num+1):
                     t = k * p
                     tmp = 0
                     if t > period:
                         break
                     for l in range(0, i + 1):
+                        # print("l:{:d} tmp:{:f} c:{:f} t:{:f}".format(l, tmp, tasks[l].c, tasks[l].t))
                         tmp += math.ceil(float(t) / tasks[l].t) * tasks[l].c
 
                     util = float(tmp) / t
                     if util < freq_list[i]:
                         freq_list[i] = util
+                    # for i in range(0, task_num):
+                    #     print("task:{:d} util:{:f} freq_list: {:f}".format(i, util,freq_list[i]))
 
+        # for i in range(0, task_num):
+        #     print("freq_list: {:f}".format(freq_list[i]))
         for i in range(0, task_num):
             if freq_list[i] > final_freq:
                 final_freq = freq_list[i]
@@ -199,37 +207,28 @@ if __name__ == '__main__':
 
     tasks = []
     policy = sys.argv[1]
-    for i in range(5):
+    for i in range(6):
         ran = abs(random.gauss(0.2, 0.1))
         period = random.uniform(500, 1500)
         tasks.append(Task(period * ran, period))
 
     rt = System()
-    """
-    for task in tasks:
-        rt.insert(0, task)
-    
-    for i in range(1, 4):
-        rt.insert(2, Task(random.uniform(1, 5), 5))
-    """
     for task in tasks:
         order = rt.rank()
         offline = [cpu for cpu in order if rt.util(cpu) == 0]
 
-        print(str(float(task.c)/task.t))
-        print(order)
-        print([rt.util(cpu) for cpu in order])
+        print(rt.generate_sysclock())
+        print("Util1: " + str(rt.util_all()))
 
         if policy == 'WF':
-            online = [cpu for cpu in order if rt.util(cpu) != 0].reverse()
+            online = [cpu for cpu in order if rt.util(cpu) != 0]
             if not online:
                 online = order
-        elif policy == 'BF':
-            online = order
         else:
-            online = order.reverse()
+            online = order
+            if policy == 'BF':
+                online.reverse()
 
-        print("Online: " + str(online))
         scheduable = False
         for cpuid in online:
             if rt.check_schedulable(cpuid, task):
@@ -246,6 +245,7 @@ if __name__ == '__main__':
         else:
             print('Unable to schechule on any cpu')
             sys.exit(1)
+
 
     print(rt.rank())
     rt.info()
