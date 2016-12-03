@@ -2,6 +2,7 @@ import sys
 import copy
 import random
 import math
+import collections
 
 RMS_bound = [
     1.000,  # 1
@@ -51,6 +52,10 @@ class System:
         for i in range(4):
             self.cpu[i] = []
 
+    def clear(self):
+        for i in range(4):
+            self.cpu[i] = []
+
     def insert(self, cpuid, task):
         self.cpu[cpuid].append(task)
         sorted(self.cpu[cpuid], reverse=True)
@@ -71,6 +76,10 @@ class System:
     def info(self):
         for cpuid, tasks in self.cpu.items():
             print('CPU{:d}: {}'.format(cpuid, ', '.join([str(task) for task in tasks])))
+
+
+    def get_curr_num(self):
+        return sum([1 if tasks else 0 for cpuid, tasks in self.cpu.items()])
 
     def check_schedulable(self, cpuid, new_task):
         tasks = self.cpu[cpuid]
@@ -185,7 +194,25 @@ class System:
             if tmp > final_sysclock:
                 final_sysclock = tmp
 
-        return final_sysclock
+
+        for i in range(0, len(SCALE_SYS_FREQ)):
+            if SCALE_SYS_FREQ[i] >= final_sysclock:
+                break
+
+        # print("final1: {:d} final2:{:d}".format(int(final_sysclock), int(SCALE_SYS_FREQ[i])))
+        return SCALE_SYS_FREQ[i]
+
+    def get_energy(self, policy):
+        k = 0.00442
+        a = 1.67
+        f = self.generate_sysclock()/1000
+        if policy == "WF" or policy == "BF":
+            b = 25.72
+        else:
+            b = 0
+        P = k * (f ** a) + b
+        E = P * 60 * self.get_curr_num()
+        return E
 
 
 class Task:
@@ -205,47 +232,56 @@ if __name__ == '__main__':
     if len(sys.argv) < 2:
         sys.exit(1)
 
-    tasks = []
     policy = sys.argv[1]
-    for i in range(6):
-        ran = abs(random.gauss(0.2, 0.1))
-        period = random.uniform(500, 1500)
-        tasks.append(Task(period * ran, period))
-
     rt = System()
-    for task in tasks:
-        order = rt.rank()
-        offline = [cpu for cpu in order if rt.util(cpu) == 0]
+    graph = {}
 
-        print(rt.generate_sysclock())
-        print("Util1: " + str(rt.util_all()))
+    for n in range(10):
 
-        if policy == 'WF':
-            online = [cpu for cpu in order if rt.util(cpu) != 0]
-            if not online:
+        rt.clear()
+        tasks = []
+        for i in range(5):
+            ran = abs(random.gauss(0.1+(0.02*n), 0.1))
+            period = random.uniform(500, 1500)
+            tasks.append(Task(period * ran, period))
+        sorted(tasks, reverse=True)
+
+        for task in tasks:
+            order = rt.rank()
+            offline = [cpu for cpu in order if rt.util(cpu) == 0]
+
+            # print("Energy(mJ): "+ str(rt.get_energy(policy)))
+            print("Order: " + str(order))
+            print("Utility: " + str(rt.util_all()))
+
+            if policy == 'WF':
+                online = [cpu for cpu in order if rt.util(cpu) != 0]
+                if not online:
+                    online = order
+            else:
                 online = order
-        else:
-            online = order
-            if policy == 'BF':
-                online.reverse()
+                if policy == 'BF':
+                    online.reverse()
 
-        scheduable = False
-        for cpuid in online:
-            if rt.check_schedulable(cpuid, task):
-                print ("Insert task: {} to cpu: {:d}".format(str(task), cpuid))
-                rt.insert(cpuid, task)
-                scheduable = True
-                break
+            scheduable = False
+            for cpuid in online:
+                if rt.check_schedulable(cpuid, task):
+                    print ("Insert task: {} to cpu: {:d}".format(str(task), cpuid))
+                    rt.insert(cpuid, task)
+                    scheduable = True
+                    break
 
-        if scheduable:
-            continue
-        if offline:
-            print("Turn on offline cpu {:d}".format(offline[0]))
-            rt.insert(offline[0], task)
-        else:
-            print('Unable to schechule on any cpu')
-            sys.exit(1)
+            if scheduable:
+                continue
+            if offline:
+                print("Turn on offline cpu {:d}".format(offline[0]))
+                rt.insert(offline[0], task)
+            else:
+                print('Unable to schechule on any cpu')
+                sys.exit(1)
 
+        graph[(sum(rt.util_all())/rt.get_curr_num())] = rt.get_energy(policy)
 
-    print(rt.rank())
-    rt.info()
+    od = collections.OrderedDict(sorted(graph.items()))
+    for k, v in od.items():
+        print(k, v)
